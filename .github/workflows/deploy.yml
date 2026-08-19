@@ -7,12 +7,18 @@ on:
 
 jobs:
   deploy:
-    # Yeh line GitHub ko bataye gi ke orders aapki CentOS VM par bheje
     runs-on: self-hosted 
 
     steps:
       - name: Checkout Code Locally
         uses: actions/checkout@v4
+
+      # AUTOMATION STEP: Creates your running environment configs instantly on every trigger run
+      - name: Auto-Provision Workspace Environment Blueprints
+        run: |
+          echo "Injecting operational environment profiles..."
+          cp .db.env.example .db.env
+          cp .env.example .env
 
       - name: Restart Multi-Container Boilerplate Stack
         run: |
@@ -20,3 +26,4 @@ jobs:
           docker compose down
           docker compose up -d --build
           echo "✅ Full-stack Docker containers updated successfully via CI/CD!"
+
