@@ -1,0 +1,22 @@
+name: FastAPI Automated Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    # Yeh line GitHub ko bataye gi ke orders aapki CentOS VM par bheje
+    runs-on: self-hosted 
+
+    steps:
+      - name: Checkout Code Locally
+        uses: actions/checkout@v4
+
+      - name: Restart Multi-Container Boilerplate Stack
+        run: |
+          echo "🚀 GitHub Actions has triggered the local self-hosted runner!"
+          docker compose down
+          docker compose up -d --build
+          echo "✅ Full-stack Docker containers updated successfully via CI/CD!"
