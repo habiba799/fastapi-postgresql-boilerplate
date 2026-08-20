@@ -41,9 +41,10 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Application Dependencies
-        run: poetry install
-             poetry run pip install pytest-httpx
-             
+        run: | 
+          poetry install
+          poetry run pip install pytest-httpx
+
       # Use your dummy placeholders safely here because this computer is destroyed right after testing!
       - name: Auto-Provision Test Environment Blueprints
         run: |
