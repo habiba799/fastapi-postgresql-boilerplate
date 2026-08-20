@@ -20,9 +20,10 @@ jobs:
           python-python-version: '3.10'
 
       # Install Poetry (the dependency manager used by this boilerplate)
+           # Install Poetry (Updated Official Installer Script URL)
       - name: Install Poetry
         run: |
-          curl -sSL https://python-poetry.org | python3 -
+          curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       # Install the required Python test libraries
