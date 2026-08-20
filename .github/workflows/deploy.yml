@@ -51,7 +51,13 @@ jobs:
       # This fixes the Permission Error safely without messing up your CentOS system permissions
       - name: Run Automated PyTest Suite
         env:
+          APP_ENV: testing
           DATABASE_URL: postgresql://postgres:password123@localhost:5432/test_db
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: password123
+          DB_NAME: test_db
         run: |
           sudo mkdir -p /var/logs
           sudo chown -R $USER:$USER /var/logs
