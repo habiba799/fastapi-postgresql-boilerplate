@@ -1,4 +1,4 @@
-name: FastAPI Automated Deployment
+name: FastAPI Complete CI/CD Pipeline
 
 on:
   push:
@@ -6,14 +6,42 @@ on:
       - main
 
 jobs:
-  deploy:
+  # STAGE 1: Continuous Integration (Testing)
+  test-and-validate:
+    runs-on: ubuntu-latest # Using a fast cloud computer to check the code quality
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python Runtime
+        uses: actions/setup-python@v5
+        with:
+          python-python-version: '3.10'
+
+      # Install Poetry (the dependency manager used by this boilerplate)
+      - name: Install Poetry
+        run: |
+          curl -sSL https://python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      # Install the required Python test libraries
+      - name: Install Application Dependencies
+        run: poetry install
+
+      # Execute the pre-existing test files inside the tests/ directory
+      - name: Run Automated PyTest Suite
+        run: poetry run pytest
+
+  # STAGE 2: Continuous Deployment (Only runs if Stage 1 passes!)
+  deploy-to-centos:
+    needs: test-and-validate # The Guardrail: Stops deployment if tests fail!
     runs-on: self-hosted 
 
     steps:
       - name: Checkout Code Locally
         uses: actions/checkout@v4
 
-      # AUTOMATION STEP: Creates your running environment configs instantly on every trigger run
       - name: Auto-Provision Workspace Environment Blueprints
         run: |
           echo "Injecting operational environment profiles..."
@@ -26,4 +54,3 @@ jobs:
           docker compose down
           docker compose up -d --build
           echo "✅ Full-stack Docker containers updated successfully via CI/CD!"
-
