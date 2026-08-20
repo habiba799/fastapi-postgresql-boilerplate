@@ -20,17 +20,22 @@ environ["APP_ENV"] = "test"
 # Auto-run Fixtures (Global Mocks & Interceptors)
 # -------------------------------------------------------------------
 @pytest.fixture(autouse=True)
-def mock_all_external_requests(httpx_mock):
+def mock_all_external_network_requests(httpx_mock):
     """
-    Auto-intercepts outbound HTTP calls to prevent socket errors.
+    This auto-running fixture intercepts every outbound HTTP request.
+    By using 'is_optional=True', tests won't crash if they don't make network calls.
     """
+    # Intercept any signup/login authentication token verify calls
     httpx_mock.add_response(
         method="POST",
         json={"status": "success", "access_token": "mocked_third_party_token"},
+        is_optional=True
     )
+    # Intercept any external email/verification calls
     httpx_mock.add_response(
         method="GET",
         json={"status": "active"},
+        is_optional=True
     )
 
 
