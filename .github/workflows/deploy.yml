@@ -26,11 +26,15 @@ jobs:
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      # Install the required Python test libraries
+      
       - name: Install Application Dependencies
         run: poetry install
 
-      # Execute the pre-existing test files inside the tests/ directory
+      - name: Pre-configure System Log Paths
+        run: |
+          sudo mkdir -p /var/logs
+          sudo chmod 777 /var/logs
+
       - name: Run Automated PyTest Suite
         run: poetry run pytest
 
