@@ -61,7 +61,8 @@ jobs:
         run: |
           sudo mkdir -p /var/logs
           sudo chown -R $USER:$USER /var/logs
-          poetry run pytest
+          # 2. Run Pytest and ignore deprecated internal third-party library warnings
+          poetry run pytest -W ignore::DeprecationWarning
 
   # STAGE 2: Protected Production Deployment (Your Live Server)
   deploy-to-centos:
