@@ -43,7 +43,8 @@ jobs:
       - name: Install Application Dependencies
         run: | 
           poetry install
-          poetry run pip install pytest-httpx
+          # Force compatibility fix for pytest-asyncio and pytest 8.2+
+          poetry run pip install --upgrade pytest-asyncio pytest-httpx
 
       # Use your dummy placeholders safely here because this computer is destroyed right after testing!
       - name: Auto-Provision Test Environment Blueprints
