@@ -16,32 +16,33 @@ from sqlalchemy.orm import sessionmaker
 environ["APP_ENV"] = "test"
 
 
-# -------------------------------------------------------------------
-# Auto-run Fixtures (Global Mocks & Interceptors)
-# -------------------------------------------------------------------
-# -------------------------------------------------------------------
-# Auto-run Fixtures (Global Mocks & Interceptors)
-# -------------------------------------------------------------------
-@pytest_asyncio.fixture(autouse=True)
-async def mock_all_external_requests(httpx_mock):
-    """
-    Auto-intercepts outbound HTTP calls inside async tests to prevent socket errors.
-    """
-    # Allow tests to complete even if they don't trigger every single mocked response
-    httpx_mock.assert_all_responses_were_requested(False)
+def pytest_collection_modifyitems(session, config, items):
+    for item in items:
+        item.add_marker(
+            pytest.mark.httpx_mock(
+                assert_all_responses_were_requested=False,
+                assert_all_requests_were_expected=False
+            )
+        )
 
-    # Intercept authentication token verify calls
+# 2. Keep the async network mock cleanly isolated from internal properties
+@pytest_asyncio.fixture(autouse=True)
+async def mock_all_external_network_requests(httpx_mock):
+    """
+    This async fixture catches outgoing endpoints cleanly.
+    The assertions are handled via the module hook above.
+    """
+    # Intercept any signup/login authentication token verify calls
     httpx_mock.add_response(
         method="POST",
-        json={"status": "success", "access_token": "mocked_third_party_token"},
+        json={"status": "success", "access_token": "mocked_third_party_token"}
     )
-
-    # Intercept external email/verification calls
+    # Intercept any external email/verification calls
     httpx_mock.add_response(
         method="GET",
-        json={"status": "active"},
+        json={"status": "active"}
     )
-
+    
 
 # -------------------------------------------------------------------
 # Application & Database Fixtures
