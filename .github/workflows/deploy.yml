@@ -8,7 +8,7 @@ on:
 jobs:
   # STAGE 1: Continuous Integration (Testing)
   test-and-validate:
-    runs-on: ubuntu-latest # Using a fast cloud computer to check the code quality
+    runs-on: self-hosted # Using a fast cloud computer to check the code quality
 
     steps:
       - name: Checkout Code
