@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from os import environ
 from typing import Any
 
+import pytest
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
@@ -9,18 +10,42 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+# -------------------------------------------------------------------
+# Environment Setup
+# -------------------------------------------------------------------
 environ["APP_ENV"] = "test"
 
 
+# -------------------------------------------------------------------
+# Auto-run Fixtures (Global Mocks & Interceptors)
+# -------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def mock_all_external_requests(httpx_mock):
+    """
+    Auto-intercepts outbound HTTP calls to prevent socket errors.
+    """
+    httpx_mock.add_response(
+        method="POST",
+        json={"status": "success", "access_token": "mocked_third_party_token"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        json={"status": "active"},
+    )
+
+
+# -------------------------------------------------------------------
+# Application & Database Fixtures
+# -------------------------------------------------------------------
 @pytest_asyncio.fixture
 def app() -> FastAPI:
-    from app.main import create_app  # local import for testing purpose
+    from app.main import create_app  # Local import for testing context
 
     return create_app()
 
 
 @pytest_asyncio.fixture
-async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI]:
+async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
     from app.core import settings
 
     async with LifespanManager(app):
@@ -42,7 +67,7 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI]:
 
 
 @pytest_asyncio.fixture
-async def client(initialized_app: FastAPI) -> AsyncGenerator[AsyncClient]:
+async def client(initialized_app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(
         transport=ASGITransport(initialized_app),
         base_url="http://test",
@@ -51,6 +76,9 @@ async def client(initialized_app: FastAPI) -> AsyncGenerator[AsyncClient]:
         yield client
 
 
+# -------------------------------------------------------------------
+# Mock Data Fixtures
+# -------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="module")
 def random_user() -> dict[str, str]:
     return dict(
