@@ -15,7 +15,6 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: postgres
-          # CHANGED: Matched your app's hardcoded fallback password exactly!
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
         ports:
@@ -41,29 +40,46 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Application Dependencies
-        run: |
-          poetry install
-          poetry run pip install pytest-httpx pytest-asyncio --upgrade
+        run: poetry install
 
+      # This creates the configuration files exactly how your original code expects them!
+      # We provide standard fallbacks for any common JWT settings used by typical boilerplates.
       - name: Run Automated PyTest Suite
+        env:
+          APP_ENV: test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+          POSTGRES_PORT: 5432
+          DEFAULT_DATABASE: postgres
+          DB_HOST: localhost
+          SECRET_KEY: test_secret_key_123_test_secret_key_123
+          JWT_SECRET: test_secret_key_123_test_secret_key_123
+          ALGORITHM: HS256
         run: |
           # 1. Clear write barriers for app loggers
           sudo mkdir -p /var/logs
           sudo chown -R $USER:$USER /var/logs
           
-          # 2. Keep routing lookups direct
+          # 2. Map host names to prevent any residual resolution loops
           sudo echo "127.0.0.1 postgresql db postgres" | sudo tee -a /etc/hosts
           
-          # 3. Explicitly construct the file variables with the correct passwords
+          # 3. Create the exact config files your boilerplate scans for on startup
           echo "APP_ENV=test" > .env
+          echo "SECRET_KEY=test_secret_key_123_test_secret_key_123" >> .env
+          echo "JWT_SECRET=test_secret_key_123_test_secret_key_123" >> .env
+          
           echo "POSTGRES_USER=postgres" > .db.env
           echo "POSTGRES_PASSWORD=postgres" >> .db.env
           echo "POSTGRES_DB=postgres" >> .db.env
           echo "POSTGRES_PORT=5432" >> .db.env
-          echo "DEFAULT_DATABASE=postgres" >> .db.env
-          echo "DB_HOST=127.0.0.1" >> .db.env
+          echo "DB_HOST=localhost" >> .db.env
           
-          # 4. Fire up the validation engine
+          # Duplicate configuration files to handle any environment naming checks (.env.test)
+          cp .env .env.test 2>/dev/null || true
+          cp .db.env .db.env.test 2>/dev/null || true
+          
+          # 4. Fire up the native validation tests
           poetry run pytest -W ignore::DeprecationWarning
 
   # STAGE 2: Continuous Deployment (Runs on your Self-Hosted Server)
