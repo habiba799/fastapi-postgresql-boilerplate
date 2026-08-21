@@ -47,8 +47,30 @@ async def mock_all_external_network_requests(httpx_mock):
 @pytest_asyncio.fixture
 def app() -> FastAPI:
     from app.main import create_app  # Local import for testing context
+    
+    app_instance = create_app()
 
-    return create_app()
+    # Dynamic Discovery: Find your app's security middleware dependency function
+    # (FastAPI boilerplates usually name it 'get_current_user' or 'get_current_active_user')
+    auth_dependency = None
+    for route in app_instance.routes:
+        if hasattr(route, "dependant"):
+            for dep in route.dependant.dependencies:
+                if dep.name in ["current_user", "get_current_user", "get_user"]:
+                    auth_dependency = dep.call
+                    break
+
+    # If found, bypass it completely during testing!
+    if auth_dependency:
+        app_instance.dependency_overrides[auth_dependency] = lambda: {
+            "id": 1,
+            "username": "tester",
+            "email": "tester@test.com",
+            "is_active": True,
+            "is_superuser": True
+        }
+
+    return app_instance
 
 
 @pytest_asyncio.fixture

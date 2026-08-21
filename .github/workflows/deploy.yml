@@ -15,8 +15,9 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password123
-          POSTGRES_DB: test_db
+          # CHANGED: Matched your app's hardcoded fallback password exactly!
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
         ports:
           - 5432:5432
         options: >-
@@ -50,14 +51,14 @@ jobs:
           sudo mkdir -p /var/logs
           sudo chown -R $USER:$USER /var/logs
           
-          # 2. Redirect the hardcoded 'postgresql' network lookup to localhost at the OS layer
+          # 2. Keep routing lookups direct
           sudo echo "127.0.0.1 postgresql db postgres" | sudo tee -a /etc/hosts
           
-          # 3. Explicitly construct the exact configuration sheets your blueprints expect
+          # 3. Explicitly construct the file variables with the correct passwords
           echo "APP_ENV=test" > .env
           echo "POSTGRES_USER=postgres" > .db.env
-          echo "POSTGRES_PASSWORD=password123" >> .db.env
-          echo "POSTGRES_DB=test_db" >> .db.env
+          echo "POSTGRES_PASSWORD=postgres" >> .db.env
+          echo "POSTGRES_DB=postgres" >> .db.env
           echo "POSTGRES_PORT=5432" >> .db.env
           echo "DEFAULT_DATABASE=postgres" >> .db.env
           echo "DB_HOST=127.0.0.1" >> .db.env
