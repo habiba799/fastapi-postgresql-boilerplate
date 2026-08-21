@@ -98,19 +98,6 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         future=True,
     )
 
-    # NO MORE GAPS: Scan the entire codebase memory dynamically to find and build ALL schemas!
-    async with engine.begin() as conn:
-        import sys
-        # Look through every imported module in your app to catch all table definitions
-        for module_name, module in list(sys.modules.items()):
-            if module_name.startswith("app."):
-                for obj in getattr(module, "__dict__", {}).values():
-                    if hasattr(obj, "metadata") and hasattr(obj.metadata, "create_all"):
-                        try:
-                            await conn.run_sync(obj.metadata.create_all)
-                        except Exception:
-                            pass
-
     # Let the application's natural lifecycle handle execution safely
     async with LifespanManager(app):
         async_session_factory = sessionmaker(
@@ -121,34 +108,6 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         )
         app.state.pool = async_session_factory
         yield app
-        
-    try:
-        async with engine.begin() as conn:
-            for module_name, module in list(sys.modules.items()):
-                if module_name.startswith("app."):
-                    for obj in getattr(module, "__dict__", {}).values():
-                        if hasattr(obj, "metadata") and hasattr(obj.metadata, "drop_all"):
-                            await conn.run_sync(obj.metadata.drop_all)
-    except Exception:
-        pass
-
-    # Let the application's natural lifecycle handle execution safely
-    async with LifespanManager(app):
-        async_session_factory = sessionmaker(
-            bind=engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-            autoflush=True,
-        )
-        app.state.pool = async_session_factory
-        yield app
-        
-    async with engine.begin() as conn:
-        try:
-            if hasattr(UserModel, "metadata"):
-                await conn.run_sync(UserModel.metadata.drop_all)
-        except Exception:
-            pass
 
 
 @pytest_asyncio.fixture

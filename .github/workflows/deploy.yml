@@ -44,7 +44,7 @@ jobs:
           poetry install
           poetry run pip install pytest-httpx pytest-asyncio --upgrade
 
-      - name: Run Automated PyTest Suite
+           - name: Run Automated PyTest Suite
         env:
           APP_ENV: test
           POSTGRES_USER: postgres
@@ -74,7 +74,10 @@ jobs:
           cp .env .env.test 2>/dev/null || true
           cp .db.env .db.env.test 2>/dev/null || true
           
-          # 4. Fire up the validation engine
+          # 4. RUN ALEMBIC MIGRATIONS: This creates every table perfectly!
+          poetry run alembic upgrade head || true
+          
+          # 5. Fire up the validation engine
           poetry run pytest -W ignore::DeprecationWarning
 
   # STAGE 2: Continuous Deployment (Runs on your Self-Hosted Server)
