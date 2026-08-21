@@ -44,7 +44,7 @@ jobs:
           poetry install
           poetry run pip install pytest-httpx pytest-asyncio --upgrade
 
-           - name: Run Automated PyTest Suite
+      - name: Run Automated PyTest Suite
         env:
           APP_ENV: test
           POSTGRES_USER: postgres
