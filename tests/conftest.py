@@ -60,8 +60,6 @@ def app() -> FastAPI:
     app_instance = create_app()
 
     # SMART INSTANCE OVERRIDE (Stops 403 Forbidden & dict AttributeErrors)
-    # Instead of an empty dictionary, this injects a mock class instance that has
-    # real model attributes (like deleted_at and change_password) to keep your repos happy!
     if UserModel:
         mock_user_instance = UserModel()
         mock_user_instance.id = 1
@@ -90,6 +88,7 @@ def app() -> FastAPI:
 @pytest_asyncio.fixture
 async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
     from app.core import settings
+    from app.models.user import User as UserModel
 
     # Bind the engine using your existing application settings variables directly
     engine = create_async_engine(
@@ -100,22 +99,11 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         future=True,
     )
 
-    # DYNAMIC METADATA GENERATOR (Stops 500 Internal Server Errors)
-    # This automatically finds your app's base model class and builds the database tables cleanly
-    try:
-        from app.models.base_class import Base
-    except ImportError:
-        try:
-            from app.db.base import Base
-        except ImportError:
-            try:
-                from app.models import Base
-            except ImportError:
-                from app.models.user import Base
-
+    # NO GUESSING PATHS: Generate tables directly from the UserModel metadata
     async with engine.begin() as conn:
         try:
-            await conn.run_sync(Base.metadata.create_all)
+            if hasattr(UserModel, "metadata"):
+                await conn.run_sync(UserModel.metadata.create_all)
         except Exception:
             pass
 
@@ -132,7 +120,8 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         
     async with engine.begin() as conn:
         try:
-            await conn.run_sync(Base.metadata.drop_all)
+            if hasattr(UserModel, "metadata"):
+                await conn.run_sync(UserModel.metadata.drop_all)
         except Exception:
             pass
 
