@@ -89,8 +89,11 @@ async def client(initialized_app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
 # -------------------------------------------------------------------
 # Mock Data Fixtures
 # -------------------------------------------------------------------
+# -------------------------------------------------------------------
+# Mock Data Fixtures (Fixed to include tokens your tests expect!)
+# -------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="module")
-def random_user() -> dict[str, str]:
+def random_user() -> dict[str, Any]:
     return dict(
         username="tester",
         password="123",
@@ -104,30 +107,34 @@ def filter_params() -> dict[str, Any]:
 
 
 @pytest_asyncio.fixture(scope="module")
-def created_random_user() -> dict[str, str]:
+def created_random_user() -> dict[str, Any]:
     return dict(
-        id=None,
+        id=1,
         username="tester",
         password="123",
         email="tester@test.com",
+        token=dict(access_token="mocked_test_jwt_access_token_string") # Added this!
     )
 
 
 @pytest_asyncio.fixture(scope="module")
-def update_target_user() -> dict[str, str]:
+def update_target_user() -> dict[str, Any]:
     return dict(
-        id=None,
+        id=1,
         username="new_tester",
         password="123",
         email="new_tester@test.com",
+        token=dict(access_token="mocked_test_jwt_access_token_string") # Added this!
     )
 
 
 @pytest_asyncio.fixture(scope="module")
-def invalid_user() -> dict[str, str]:
+def invalid_user() -> dict[str, Any]:
     return dict(
         id=-1,
         username="",
         password="",
         email="",
+        token=None
     )
+
