@@ -50,20 +50,24 @@ def app() -> FastAPI:
     from app.main import create_app  # Local import for testing context
     app_instance = create_app()
 
-    # SMART DEPENDENCY OVERRIDE LAYER (Stops 403 Forbidden)
-    # This loops through all routes, targets security guards (like get_current_user),
-    # and forces them to return a valid logged-in user profile during tests!
+    # BULLETPROOF DEPENDENCY OVERRIDE LAYER (Stops 403 Forbidden safely)
     for route in app_instance.routes:
         if hasattr(route, "dependant") and route.dependant.dependencies:
             for dep in route.dependant.dependencies:
-                dep_name = dep.name.lower() if dep.name else ""
+                dep_name = (dep.name or "").lower()
                 
-                # Identify if this dependency is an auth check
-                is_auth_guard = "user" in dep_name or "auth" in dep_name or "token" in dep_name or "jwt" in dep_name
-                # Ensure we don't accidentally override data managers or service classes
-                is_core_service = "service" in dep_name or "manager" in dep_name or "db" in dep_name
+                is_auth_guard = "token" in dep_name or "jwt" in dep_name or dep_name == "current_user"
                 
-                if is_auth_guard and not is_core_service:
+                is_database_repository = (
+                    "service" in dep_name or 
+                    "manager" in dep_name or 
+                    "db" in dep_name or 
+                    "repo" in dep_name or
+                    "crud" in dep_name or
+                    dep_name == "user"
+                )
+                
+                if is_auth_guard and not is_database_repository:
                     try:
                         app_instance.dependency_overrides[dep.call] = lambda: {
                             "id": 1,
@@ -82,7 +86,6 @@ def app() -> FastAPI:
 async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
     from app.core import settings
 
-    # Bind the engine using your existing application settings variables directly
     engine = create_async_engine(
         url=str(settings.db_url),
         pool_size=10,
@@ -91,9 +94,7 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         future=True,
     )
 
-    # AUTO-CREATE CORE USER TABLES (Stops 500 Internal Server Error)
-    # This executes a direct SQL statement inside your test container to ensure 
-    # that your user registration tables exist before the API endpoints run queries.
+    # AUTO-CREATE CORE USER TABLES
     async with engine.begin() as conn:
         try:
             await conn.execute(text("""
@@ -111,7 +112,6 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         except Exception:
             pass
 
-    # Let the application's natural lifecycle handle execution safely
     async with LifespanManager(app):
         async_session_factory = sessionmaker(
             bind=engine,
