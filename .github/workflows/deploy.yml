@@ -45,30 +45,24 @@ jobs:
           poetry run pip install pytest-httpx pytest-asyncio --upgrade
 
       - name: Run Automated PyTest Suite
-        env:
-          APP_ENV: test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password123
-          POSTGRES_DB: test_db
-          POSTGRES_PORT: 5432
-          DEFAULT_DATABASE: postgres
         run: |
-          # 1. Clear permission errors for system logs
+          # 1. Clear write barriers for app loggers
           sudo mkdir -p /var/logs
           sudo chown -R $USER:$USER /var/logs
           
-          # 2. Write dynamic environment variables matching your exact config files
+          # 2. Redirect the hardcoded 'postgresql' network lookup to localhost at the OS layer
+          sudo echo "127.0.0.1 postgresql db postgres" | sudo tee -a /etc/hosts
+          
+          # 3. Explicitly construct the exact configuration sheets your blueprints expect
           echo "APP_ENV=test" > .env
           echo "POSTGRES_USER=postgres" > .db.env
           echo "POSTGRES_PASSWORD=password123" >> .db.env
           echo "POSTGRES_DB=test_db" >> .db.env
           echo "POSTGRES_PORT=5432" >> .db.env
+          echo "DEFAULT_DATABASE=postgres" >> .db.env
+          echo "DB_HOST=127.0.0.1" >> .db.env
           
-          # 3. Duplicate configurations to support any custom file loaders (.env.test)
-          cp .env .env.test
-          cp .db.env .db.env.test
-          
-          # 4. Fire up validation tests without warning spam
+          # 4. Fire up the validation engine
           poetry run pytest -W ignore::DeprecationWarning
 
   # STAGE 2: Continuous Deployment (Runs on your Self-Hosted Server)
@@ -90,5 +84,5 @@ jobs:
           docker compose down
           docker compose up -d --build
           
-          echo "🧹 Automatically pruning unused Docker layers to save storage space..."
+          echo "🧹 Pruning unused Docker structures to optimize server storage..."
           docker system prune -f

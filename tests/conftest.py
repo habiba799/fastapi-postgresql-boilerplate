@@ -84,7 +84,7 @@ async def client(initialized_app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
 
 
 # -------------------------------------------------------------------
-# Structured Mock Data Fixtures
+# Mock Data Fixtures (Perfected with structural dictionaries)
 # -------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="module")
 def random_user() -> dict[str, Any]:
@@ -102,12 +102,16 @@ def filter_params() -> dict[str, Any]:
 
 @pytest_asyncio.fixture(scope="module")
 def created_random_user() -> dict[str, Any]:
+    # We provide a complete token sub-dictionary so your test route checks pass cleanly
     return dict(
         id=1,
         username="tester",
         password="123",
         email="tester@test.com",
-        token=dict(access_token="mocked_jwt_token")
+        token=dict(
+            access_token="mocked_jwt_token",
+            token_type="bearer"
+        )
     )
 
 
@@ -118,7 +122,10 @@ def update_target_user() -> dict[str, Any]:
         username="new_tester",
         password="123",
         email="new_tester@test.com",
-        token=dict(access_token="mocked_jwt_token")
+        token=dict(
+            access_token="mocked_jwt_token",
+            token_type="bearer"
+        )
     )
 
 
