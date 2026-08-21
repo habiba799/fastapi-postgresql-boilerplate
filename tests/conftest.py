@@ -64,8 +64,10 @@ def app() -> FastAPI:
         mock_user_instance.id = 1
         mock_user_instance.username = "tester"
         mock_user_instance.email = "tester@test.com"
-        mock_user_instance.is_active = True
-        mock_user_instance.is_superuser = True
+        
+        # Populate the exact schema properties to avoid initialization gaps
+        setattr(mock_user_instance, "salt", "mocked_salt_string")
+        setattr(mock_user_instance, "hashed_password", "mocked_hashed_password_string")
 
         for route in app_instance.routes:
             if hasattr(route, "dependant") and route.dependant.dependencies:
@@ -114,9 +116,7 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         )
         app.state.pool = async_session_factory
         
-        # CORE FRAMEWORK SEEDING LAYER:
-        # Instead of raw SQL, we instantiate your exact schema class.
-        # This completely guarantees the exact structural table/column keys are matched!
+        # FIXED PRE-SEED: Map fields matching your strict column constraints
         if UserModel:
             async with async_session_factory() as session:
                 try:
@@ -124,13 +124,10 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
                     mock_db_user.id = 1
                     mock_db_user.username = "tester"
                     mock_db_user.email = "tester@test.com"
-                    mock_db_user.password = "hashed_123_placeholder"
-                    mock_db_user.is_active = True
-                    mock_db_user.is_superuser = True
                     
-                    # Safely map custom fields if your boilerplate has them
-                    if hasattr(mock_db_user, "is_verified"):
-                        mock_db_user.is_verified = True
+                    # Direct assignment satisfies your NotNullViolationError locks
+                    setattr(mock_db_user, "salt", "mocked_salt_string")
+                    setattr(mock_db_user, "hashed_password", "mocked_hashed_password_string")
 
                     session.add(mock_db_user)
                     await session.commit()
@@ -139,6 +136,7 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
                     await session.rollback()
 
         yield app
+
 
 @pytest_asyncio.fixture
 async def client(initialized_app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
