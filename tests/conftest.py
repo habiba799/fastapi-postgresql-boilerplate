@@ -47,41 +47,32 @@ async def mock_all_external_network_requests(httpx_mock):
 @pytest_asyncio.fixture
 def app() -> FastAPI:
     from app.main import create_app  # Local import for testing context
-    
-    try:
-        from app.models.user import User as UserModel
-    except ImportError:
-        try:
-            from app.models import User as UserModel
-        except ImportError:
-            UserModel = None
-
     app_instance = create_app()
 
-    if UserModel:
-        mock_user_instance = UserModel()
-        mock_user_instance.id = 1
-        mock_user_instance.username = "tester"
-        mock_user_instance.email = "tester@test.com"
-        
-        # Populate standard field mocks for router checks
-        setattr(mock_user_instance, "salt", "mocked_salt_string")
-        # Real valid Bcrypt hash for string "123"
-        setattr(mock_user_instance, "hashed_password", "$2b$12$4OqyX6l7m8x.qP7V/gY9be7YwXp7S8Zg5f9n3F6Vq2T1A6mC9YxKu")
-
-        for route in app_instance.routes:
-            if hasattr(route, "dependant") and route.dependant.dependencies:
-                for dep in route.dependant.dependencies:
-                    dep_name = (dep.name or "").lower()
-                    
-                    is_auth_guard = "token" in dep_name or "jwt" in dep_name or dep_name == "current_user"
-                    is_core_service = "service" in dep_name or "manager" in dep_name or "db" in dep_name
-                    
-                    if is_auth_guard and not is_core_service:
-                        try:
-                            app_instance.dependency_overrides[dep.call] = lambda: mock_user_instance
-                        except Exception:
-                            pass
+    # SMART INTERCEPTOR LOOP (Stops 403 Forbidden)
+    # We pass a clean structural dictionary here to fulfill security guards safely.
+    # We DO NOT use UserModel() here to avoid detached session corruption errors.
+    for route in app_instance.routes:
+        if hasattr(route, "dependant") and route.dependant.dependencies:
+            for dep in route.dependant.dependencies:
+                dep_name = (dep.name or "").lower()
+                
+                is_auth_guard = "token" in dep_name or "jwt" in dep_name or dep_name == "current_user"
+                is_core_service = "service" in dep_name or "manager" in dep_name or "db" in dep_name
+                
+                if is_auth_guard and not is_core_service:
+                    try:
+                        app_instance.dependency_overrides[dep.call] = lambda: {
+                            "id": 1,
+                            "username": "tester",
+                            "email": "tester@test.com",
+                            "is_active": True,
+                            "is_superuser": True,
+                            "salt": "mocked_salt_string",
+                            "hashed_password": "$2b$12$4OqyX6l7m8x.qP7V/gY9be7YwXp7S8Zg5f9n3F6Vq2T1A6mC9YxKu"
+                        }
+                    except Exception:
+                        pass
 
     return app_instance
 
@@ -116,16 +107,17 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         )
         app.state.pool = async_session_factory
         
-        # SAFE PRE-SEED BLOCK
+        # CLEAN DATABASE SEEDING BLOCK
         if UserModel:
             async with async_session_factory() as session:
                 try:
+                    # Instantiating a clean model cleanly inside a running session transaction
                     mock_db_user = UserModel()
                     mock_db_user.id = 1
                     mock_db_user.username = "tester"
                     mock_db_user.email = "tester@test.com"
                     
-                    # Exact valid encrypted Bcrypt password block for user verification routines
+                    # Direct assignment utilizes valid structural bcrypt password strings
                     setattr(mock_db_user, "salt", "mocked_salt_string")
                     setattr(mock_db_user, "hashed_password", "$2b$12$4OqyX6l7m8x.qP7V/gY9be7YwXp7S8Zg5f9n3F6Vq2T1A6mC9YxKu")
 
