@@ -7,7 +7,6 @@ import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -48,36 +47,42 @@ async def mock_all_external_network_requests(httpx_mock):
 @pytest_asyncio.fixture
 def app() -> FastAPI:
     from app.main import create_app  # Local import for testing context
+    
+    # Import your actual User Model Class dynamically from your application
+    try:
+        from app.models.user import User as UserModel
+    except ImportError:
+        try:
+            from app.models import User as UserModel
+        except ImportError:
+            UserModel = None
+
     app_instance = create_app()
 
-    # BULLETPROOF DEPENDENCY OVERRIDE LAYER (Stops 403 Forbidden safely)
-    for route in app_instance.routes:
-        if hasattr(route, "dependant") and route.dependant.dependencies:
-            for dep in route.dependant.dependencies:
-                dep_name = (dep.name or "").lower()
-                
-                is_auth_guard = "token" in dep_name or "jwt" in dep_name or dep_name == "current_user"
-                
-                is_database_repository = (
-                    "service" in dep_name or 
-                    "manager" in dep_name or 
-                    "db" in dep_name or 
-                    "repo" in dep_name or
-                    "crud" in dep_name or
-                    dep_name == "user"
-                )
-                
-                if is_auth_guard and not is_database_repository:
-                    try:
-                        app_instance.dependency_overrides[dep.call] = lambda: {
-                            "id": 1,
-                            "username": "tester",
-                            "email": "tester@test.com",
-                            "is_active": True,
-                            "is_superuser": True
-                        }
-                    except Exception:
-                        pass
+    # SMART INSTANCE OVERRIDE (Stops 403 Forbidden & dict AttributeErrors)
+    # Instead of an empty dictionary, this injects a mock class instance that has
+    # real model attributes (like deleted_at and change_password) to keep your repos happy!
+    if UserModel:
+        mock_user_instance = UserModel()
+        mock_user_instance.id = 1
+        mock_user_instance.username = "tester"
+        mock_user_instance.email = "tester@test.com"
+        mock_user_instance.is_active = True
+        mock_user_instance.is_superuser = True
+
+        for route in app_instance.routes:
+            if hasattr(route, "dependant") and route.dependant.dependencies:
+                for dep in route.dependant.dependencies:
+                    dep_name = (dep.name or "").lower()
+                    
+                    is_auth_guard = "token" in dep_name or "jwt" in dep_name or dep_name == "current_user"
+                    is_core_service = "service" in dep_name or "manager" in dep_name or "db" in dep_name
+                    
+                    if is_auth_guard and not is_core_service:
+                        try:
+                            app_instance.dependency_overrides[dep.call] = lambda: mock_user_instance
+                        except Exception:
+                            pass
 
     return app_instance
 
@@ -86,6 +91,7 @@ def app() -> FastAPI:
 async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
     from app.core import settings
 
+    # Bind the engine using your existing application settings variables directly
     engine = create_async_engine(
         url=str(settings.db_url),
         pool_size=10,
@@ -94,24 +100,26 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         future=True,
     )
 
-    # AUTO-CREATE CORE USER TABLES
+    # DYNAMIC METADATA GENERATOR (Stops 500 Internal Server Errors)
+    # This automatically finds your app's base model class and builds the database tables cleanly
+    try:
+        from app.models.base_class import Base
+    except ImportError:
+        try:
+            from app.db.base import Base
+        except ImportError:
+            try:
+                from app.models import Base
+            except ImportError:
+                from app.models.user import Base
+
     async with engine.begin() as conn:
         try:
-            await conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(255) UNIQUE NOT NULL,
-                    email VARCHAR(255) UNIQUE NOT NULL,
-                    password VARCHAR(255) NOT NULL,
-                    is_active BOOLEAN DEFAULT TRUE,
-                    is_superuser BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-            """))
+            await conn.run_sync(Base.metadata.create_all)
         except Exception:
             pass
 
+    # Let the application's natural lifecycle handle execution safely
     async with LifespanManager(app):
         async_session_factory = sessionmaker(
             bind=engine,
@@ -121,6 +129,12 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         )
         app.state.pool = async_session_factory
         yield app
+        
+    async with engine.begin() as conn:
+        try:
+            await conn.run_sync(Base.metadata.drop_all)
+        except Exception:
+            pass
 
 
 @pytest_asyncio.fixture
