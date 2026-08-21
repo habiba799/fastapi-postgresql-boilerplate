@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  # STAGE 1: Safe Cloud Testing (Isolated Environment)
+  # STAGE 1: Continuous Integration (Runs on GitHub Cloud)
   test-and-validate:
     runs-on: ubuntu-latest 
 
@@ -32,44 +32,46 @@ jobs:
       - name: Set up Python Runtime
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          
+          python-version: '3.12'
 
       - name: Install Poetry
         run: |
-          curl -sSL https://install.python-poetry.org | python3 -
+          curl -sSL https://python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Application Dependencies
-        run: | 
-          poetry install
-          # Force compatibility fix for pytest-asyncio and pytest 8.2+
-          poetry run pip install --upgrade pytest-asyncio pytest-httpx
-
-      # Use your dummy placeholders safely here because this computer is destroyed right after testing!
-      - name: Auto-Provision Test Environment Blueprints
         run: |
-          cp .db.env.example .db.env
-          cp .env.example .env
+          poetry install
+          poetry run pip install pytest-httpx pytest-asyncio --upgrade
 
-      # This fixes the Permission Error safely without messing up your CentOS system permissions
       - name: Run Automated PyTest Suite
         env:
-          APP_ENV: testing
-          DATABASE_URL: postgresql://postgres:password123@localhost:5432/test_db
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_USER: postgres
-          DB_PASSWORD: password123
-          DB_NAME: test_db
+          APP_ENV: test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password123
+          POSTGRES_DB: test_db
+          POSTGRES_PORT: 5432
+          DEFAULT_DATABASE: postgres
         run: |
+          # 1. Clear permission errors for system logs
           sudo mkdir -p /var/logs
           sudo chown -R $USER:$USER /var/logs
-          # 2. Run Pytest and ignore deprecated internal third-party library warnings
-          rm -f .env .db.env .env.testing 2>/dev/null || true
+          
+          # 2. Write dynamic environment variables matching your exact config files
+          echo "APP_ENV=test" > .env
+          echo "POSTGRES_USER=postgres" > .db.env
+          echo "POSTGRES_PASSWORD=password123" >> .db.env
+          echo "POSTGRES_DB=test_db" >> .db.env
+          echo "POSTGRES_PORT=5432" >> .db.env
+          
+          # 3. Duplicate configurations to support any custom file loaders (.env.test)
+          cp .env .env.test
+          cp .db.env .db.env.test
+          
+          # 4. Fire up validation tests without warning spam
           poetry run pytest -W ignore::DeprecationWarning
 
-  # STAGE 2: Protected Production Deployment (Your Live Server)
+  # STAGE 2: Continuous Deployment (Runs on your Self-Hosted Server)
   deploy-to-centos:
     needs: test-and-validate 
     runs-on: self-hosted 
@@ -78,14 +80,15 @@ jobs:
       - name: Checkout Code Locally
         uses: actions/checkout@v4
 
-      # Clean cache correctly (Fixed your 3-underscore typo to standard 2-underscores)
       - name: Clean Old Python Cache Files
         run: |
           sudo rm -rf **/___pycache___ *.pyc 2>/dev/null || true
-      
+
       - name: Restart Multi-Container Boilerplate Stack
         run: |
-          echo "🚀 GitHub Actions triggering production stack update!"
+          echo "🚀 GitHub Actions triggering production stack update on CentOS!"
           docker compose down
           docker compose up -d --build
-          echo "✅ Full-stack Docker containers updated successfully via CI/CD!"
+          
+          echo "🧹 Automatically pruning unused Docker layers to save storage space..."
+          docker system prune -f

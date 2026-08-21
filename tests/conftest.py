@@ -10,12 +10,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-# -------------------------------------------------------------------
-# Environment Setup
-# -------------------------------------------------------------------
+# Enforce test environment flags right away
 environ["APP_ENV"] = "test"
 
 
+# 1. Globally instruct pytest-httpx to skip assertion verification failures
 def pytest_collection_modifyitems(session, config, items):
     for item in items:
         item.add_marker(
@@ -25,27 +24,25 @@ def pytest_collection_modifyitems(session, config, items):
             )
         )
 
-# 2. Keep the async network mock cleanly isolated from internal properties
+
+# 2. Automatically intercept any unexpected outbound network calls
 @pytest_asyncio.fixture(autouse=True)
 async def mock_all_external_network_requests(httpx_mock):
     """
-    This async fixture catches outgoing endpoints cleanly.
-    The assertions are handled via the module hook above.
+    Catches background connections inside the async engine block.
     """
-    # Intercept any signup/login authentication token verify calls
     httpx_mock.add_response(
         method="POST",
-        json={"status": "success", "access_token": "mocked_third_party_token"}
+        json={"status": "success", "access_token": "mocked_jwt_token"}
     )
-    # Intercept any external email/verification calls
     httpx_mock.add_response(
         method="GET",
         json={"status": "active"}
     )
-    
+
 
 # -------------------------------------------------------------------
-# Application & Database Fixtures
+# Core Boilerplate Engine Fixtures
 # -------------------------------------------------------------------
 @pytest_asyncio.fixture
 def app() -> FastAPI:
@@ -87,10 +84,7 @@ async def client(initialized_app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
 
 
 # -------------------------------------------------------------------
-# Mock Data Fixtures
-# -------------------------------------------------------------------
-# -------------------------------------------------------------------
-# Mock Data Fixtures (Fixed to include tokens your tests expect!)
+# Structured Mock Data Fixtures
 # -------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="module")
 def random_user() -> dict[str, Any]:
@@ -113,7 +107,7 @@ def created_random_user() -> dict[str, Any]:
         username="tester",
         password="123",
         email="tester@test.com",
-        token=dict(access_token="mocked_test_jwt_access_token_string") # Added this!
+        token=dict(access_token="mocked_jwt_token")
     )
 
 
@@ -124,7 +118,7 @@ def update_target_user() -> dict[str, Any]:
         username="new_tester",
         password="123",
         email="new_tester@test.com",
-        token=dict(access_token="mocked_test_jwt_access_token_string") # Added this!
+        token=dict(access_token="mocked_jwt_token")
     )
 
 
@@ -137,4 +131,3 @@ def invalid_user() -> dict[str, Any]:
         email="",
         token=None
     )
-
