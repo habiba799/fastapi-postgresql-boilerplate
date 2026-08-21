@@ -53,7 +53,6 @@ jobs:
           POSTGRES_PORT: 5432
           DEFAULT_DATABASE: postgres
           DB_HOST: localhost
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
         run: |
           # 1. Establish logging directory spaces
           sudo mkdir -p /var/logs
@@ -64,7 +63,6 @@ jobs:
           
           # 3. Create the exact baseline configurations your blueprints scan for on startup
           echo "APP_ENV=test" > .env
-          echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/postgres" >> .env
           
           echo "POSTGRES_USER=postgres" > .db.env
           echo "POSTGRES_PASSWORD=postgres" >> .db.env
@@ -76,7 +74,7 @@ jobs:
           cp .env .env.test 2>/dev/null || true
           cp .db.env .db.env.test 2>/dev/null || true
           
-          # 4. RUN ALEMBIC MIGRATIONS Safely (No || true, so we can spot errors)
+          # 4. RUN ALEMBIC MIGRATIONS
           poetry run alembic upgrade head
           
           # 5. Clear runtime python caching spaces
