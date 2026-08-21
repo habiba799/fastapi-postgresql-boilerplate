@@ -50,14 +50,21 @@ def app() -> FastAPI:
     
     app_instance = create_app()
 
-    # SMART AUTHENTICATION OVERRIDE (Stops 403 Forbidden)
-    # This safely overrides only dependencies named 'current_user' or containing 'auth' / 'token'
-    # It leaves your database services and app managers completely untouched!
+    # PRECISION AUTHENTICATION OVERRIDE (Stops 403 Forbidden)
+    # This targets ONLY security verification dependencies (like JWTBearer or get_current_user)
+    # It strictly avoids breaking your database services (signup_user, get_users, etc.)
     for route in app_instance.routes:
         if hasattr(route, "dependant") and route.dependant.dependencies:
             for dep in route.dependant.dependencies:
                 dep_name = dep.name.lower() if dep.name else ""
-                if "user" in dep_name or "auth" in dep_name or "token" in dep_name:
+                
+                # Check for explicit token verification names
+                is_auth_guard = "token" in dep_name or "jwt" in dep_name or dep_name == "current_user"
+                
+                # CRITICAL SAFETY CHECK: Never override database service classes/managers
+                is_database_service = "service" in dep_name or "manager" in dep_name or "db" in dep_name
+                
+                if is_auth_guard and not is_database_service:
                     app_instance.dependency_overrides[dep.call] = lambda: {
                         "id": 1,
                         "username": "tester",
