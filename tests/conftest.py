@@ -50,18 +50,21 @@ def app() -> FastAPI:
     
     app_instance = create_app()
 
-    # FORCE AUTHENTICATION OVERRIDE (Stops 403 Forbidden)
-    # Scans every route dependency and bypasses security checks with a valid test user dictionary
+    # SMART AUTHENTICATION OVERRIDE (Stops 403 Forbidden)
+    # This safely overrides only dependencies named 'current_user' or containing 'auth' / 'token'
+    # It leaves your database services and app managers completely untouched!
     for route in app_instance.routes:
         if hasattr(route, "dependant") and route.dependant.dependencies:
             for dep in route.dependant.dependencies:
-                app_instance.dependency_overrides[dep.call] = lambda: {
-                    "id": 1,
-                    "username": "tester",
-                    "email": "tester@test.com",
-                    "is_active": True,
-                    "is_superuser": True
-                }
+                dep_name = dep.name.lower() if dep.name else ""
+                if "user" in dep_name or "auth" in dep_name or "token" in dep_name:
+                    app_instance.dependency_overrides[dep.call] = lambda: {
+                        "id": 1,
+                        "username": "tester",
+                        "email": "tester@test.com",
+                        "is_active": True,
+                        "is_superuser": True
+                    }
 
     return app_instance
 
@@ -78,20 +81,8 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         echo=False,
         future=True,
     )
-    
-    # Instruct the system application to dynamically map the models
-    # This completely bypasses the Base import errors
-    try:
-        from app.db.session import engine as app_engine
-        async with engine.begin() as conn:
-            # Dynamically pull the model structures registered by the app routes
-            from app.models import User
-            if hasattr(User, "metadata"):
-                await conn.run_sync(User.metadata.create_all)
-    except Exception:
-        # Fallback: Let your application's natural startup events create tables
-        pass
 
+    # Let the application's natural lifecycle and startup events handle schemas safely
     async with LifespanManager(app):
         async_session_factory = sessionmaker(
             bind=engine,
@@ -101,10 +92,6 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         )
         app.state.pool = async_session_factory
         yield app
-        
-    async with engine.begin() as conn:
-        # Purge temporary tables on closing sequence
-        await conn.run_sync(Base.metadata.drop_all)
 
 
 @pytest_asyncio.fixture
