@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 
 # Enforce test environment flags right away
 environ["APP_ENV"] = "test"
@@ -98,7 +99,6 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         future=True,
     )
 
-    # Let the application's natural lifecycle handle execution safely
     async with LifespanManager(app):
         async_session_factory = sessionmaker(
             bind=engine,
@@ -107,8 +107,22 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
             autoflush=True,
         )
         app.state.pool = async_session_factory
-        yield app
+        
+        # PRE-SEED TEST USER: Injects id=1 into the blank test table
+        # This gives test_update_user and test_delete_user a target to modify!
+        async with async_session_factory() as session:
+            async with session.begin():
+                try:
+                    await session.execute(text("""
+                        INSERT INTO users (id, username, email, password, is_active, is_superuser)
+                        VALUES (1, 'tester', 'tester@test.com', 'hashed_123_placeholder', TRUE, TRUE)
+                        ON CONFLICT (id) DO NOTHING;
+                    """))
+                    await session.commit()
+                except Exception:
+                    pass
 
+        yield app
 
 @pytest_asyncio.fixture
 async def client(initialized_app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
