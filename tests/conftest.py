@@ -7,7 +7,6 @@ import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -65,9 +64,9 @@ def app() -> FastAPI:
         mock_user_instance.username = "tester"
         mock_user_instance.email = "tester@test.com"
         
-        # Populate the exact schema properties to avoid initialization gaps
+        # Populate standard field mocks for router checks
         setattr(mock_user_instance, "salt", "mocked_salt_string")
-        setattr(mock_user_instance, "hashed_password", "mocked_hashed_password_string")
+        setattr(mock_user_instance, "hashed_password", "$2b$12$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7hw93f6qvUVTWmaiwKhCHZu")
 
         for route in app_instance.routes:
             if hasattr(route, "dependant") and route.dependant.dependencies:
@@ -116,20 +115,21 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         )
         app.state.pool = async_session_factory
         
-        # FIXED PRE-SEED: Map fields matching your strict column constraints
+        # SAFE PRE-SEED BLOCK
         if UserModel:
             async with async_session_factory() as session:
                 try:
                     mock_db_user = UserModel()
                     mock_db_user.id = 1
                     mock_db_user.username = "tester"
-                    mock_db_user.email = "tester@test.com"
+                    mock_db_user.email = "[email protected]"
                     
-                    # Direct assignment satisfies your NotNullViolationError locks
+                    # Direct assignment utilizes valid structural bcrypt password strings
                     setattr(mock_db_user, "salt", "mocked_salt_string")
-                    setattr(mock_db_user, "hashed_password", "mocked_hashed_password_string")
+                    setattr(mock_db_user, "hashed_password", "$2b$12$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7hw93f6qvUVTWmaiwKhCHZu")
 
-                    session.add(mock_db_user)
+                    # Use merge to update cleanly instead of crashing on key duplicates
+                    await session.merge(mock_db_user)
                     await session.commit()
                 except Exception as e:
                     print(f"Framework entity pre-seeding skipped/failed: {e}")
@@ -154,9 +154,9 @@ async def client(initialized_app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
 @pytest_asyncio.fixture(scope="module")
 def random_user() -> dict[str, Any]:
     return dict(
-        username="tester",
+        username="tester_new",
         password="123",
-        email="tester@test.com",
+        email="[email protected]",
     )
 
 
@@ -171,7 +171,7 @@ def created_random_user() -> dict[str, Any]:
         id=1,
         username="tester",
         password="123",
-        email="tester@test.com",
+        email="[email protected]",
         token=dict(
             access_token="mocked_jwt_token",
             token_type="bearer"
@@ -185,7 +185,7 @@ def update_target_user() -> dict[str, Any]:
         id=1,
         username="new_tester",
         password="123",
-        email="new_tester@test.com",
+        email="[email protected]",
         token=dict(
             access_token="mocked_jwt_token",
             token_type="bearer"
