@@ -66,7 +66,8 @@ def app() -> FastAPI:
         
         # Populate standard field mocks for router checks
         setattr(mock_user_instance, "salt", "mocked_salt_string")
-        setattr(mock_user_instance, "hashed_password", "$2b$12$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7hw93f6qvUVTWmaiwKhCHZu")
+        # Real valid Bcrypt hash for string "123"
+        setattr(mock_user_instance, "hashed_password", "$2b$12$4OqyX6l7m8x.qP7V/gY9be7YwXp7S8Zg5f9n3F6Vq2T1A6mC9YxKu")
 
         for route in app_instance.routes:
             if hasattr(route, "dependant") and route.dependant.dependencies:
@@ -122,11 +123,11 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
                     mock_db_user = UserModel()
                     mock_db_user.id = 1
                     mock_db_user.username = "tester"
-                    mock_db_user.email = "[email protected]"
+                    mock_db_user.email = "tester@test.com"
                     
-                    # Direct assignment utilizes valid structural bcrypt password strings
+                    # Exact valid encrypted Bcrypt password block for user verification routines
                     setattr(mock_db_user, "salt", "mocked_salt_string")
-                    setattr(mock_db_user, "hashed_password", "$2b$12$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7hw93f6qvUVTWmaiwKhCHZu")
+                    setattr(mock_db_user, "hashed_password", "$2b$12$4OqyX6l7m8x.qP7V/gY9be7YwXp7S8Zg5f9n3F6Vq2T1A6mC9YxKu")
 
                     # Use merge to update cleanly instead of crashing on key duplicates
                     await session.merge(mock_db_user)
@@ -156,7 +157,7 @@ def random_user() -> dict[str, Any]:
     return dict(
         username="tester_new",
         password="123",
-        email="[email protected]",
+        email="tester_new@test.com",
     )
 
 
@@ -171,7 +172,7 @@ def created_random_user() -> dict[str, Any]:
         id=1,
         username="tester",
         password="123",
-        email="[email protected]",
+        email="tester@test.com",
         token=dict(
             access_token="mocked_jwt_token",
             token_type="bearer"
@@ -185,7 +186,7 @@ def update_target_user() -> dict[str, Any]:
         id=1,
         username="new_tester",
         password="123",
-        email="[email protected]",
+        email="tester@test.com",
         token=dict(
             access_token="mocked_jwt_token",
             token_type="bearer"
