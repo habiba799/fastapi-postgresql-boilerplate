@@ -47,33 +47,7 @@ async def mock_all_external_network_requests(httpx_mock):
 @pytest_asyncio.fixture
 def app() -> FastAPI:
     from app.main import create_app  # Local import for testing context
-    
-    app_instance = create_app()
-
-    # PRECISION AUTHENTICATION OVERRIDE (Stops 403 Forbidden)
-    # This targets ONLY security verification dependencies (like JWTBearer or get_current_user)
-    # It strictly avoids breaking your database services (signup_user, get_users, etc.)
-    for route in app_instance.routes:
-        if hasattr(route, "dependant") and route.dependant.dependencies:
-            for dep in route.dependant.dependencies:
-                dep_name = dep.name.lower() if dep.name else ""
-                
-                # Check for explicit token verification names
-                is_auth_guard = "token" in dep_name or "jwt" in dep_name or dep_name == "current_user"
-                
-                # CRITICAL SAFETY CHECK: Never override database service classes/managers
-                is_database_service = "service" in dep_name or "manager" in dep_name or "db" in dep_name
-                
-                if is_auth_guard and not is_database_service:
-                    app_instance.dependency_overrides[dep.call] = lambda: {
-                        "id": 1,
-                        "username": "tester",
-                        "email": "tester@test.com",
-                        "is_active": True,
-                        "is_superuser": True
-                    }
-
-    return app_instance
+    return create_app()
 
 
 @pytest_asyncio.fixture
@@ -89,7 +63,23 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         future=True,
     )
 
-    # Let the application's natural lifecycle and startup events handle schemas safely
+    # AUTO-CREATE TABLES: Dynamically map your models to fix the 500 error!
+    try:
+        from app.models.base_class import Base
+    except ImportError:
+        try:
+            from app.db.base import Base
+        except ImportError:
+            try:
+                from app.models import Base
+            except ImportError:
+                from app.db.base_class import Base
+
+    async with engine.begin() as conn:
+        # Recreate the tables cleanly inside the clean cloud database container
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Let the application's natural lifecycle and startup events handle execution safely
     async with LifespanManager(app):
         async_session_factory = sessionmaker(
             bind=engine,
@@ -99,6 +89,10 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         )
         app.state.pool = async_session_factory
         yield app
+        
+    async with engine.begin() as conn:
+        # Clean up database structure when the test run closes
+        await conn.run_sync(Base.metadata.drop_all)
 
 
 @pytest_asyncio.fixture
@@ -130,13 +124,18 @@ def filter_params() -> dict[str, Any]:
 
 @pytest_asyncio.fixture(scope="module")
 def created_random_user() -> dict[str, Any]:
+    # We generate a real, mockable token layout here that satisfies JWT decoders naturally
+    # without needing to loop and break your app's core service dependencies
+    from app.core.security import create_access_token
+    token_str = create_access_token(subject="tester")
+    
     return dict(
         id=1,
         username="tester",
         password="123",
         email="tester@test.com",
         token=dict(
-            access_token="mocked_jwt_token",
+            access_token=token_str,
             token_type="bearer"
         )
     )
@@ -144,13 +143,16 @@ def created_random_user() -> dict[str, Any]:
 
 @pytest_asyncio.fixture(scope="module")
 def update_target_user() -> dict[str, Any]:
+    from app.core.security import create_access_token
+    token_str = create_access_token(subject="tester")
+    
     return dict(
         id=1,
         username="new_tester",
         password="123",
         email="new_tester@test.com",
         token=dict(
-            access_token="mocked_jwt_token",
+            access_token=token_str,
             token_type="bearer"
         )
     )
