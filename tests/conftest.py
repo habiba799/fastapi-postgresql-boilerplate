@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from datetime import datetime, timedelta, timezone
 from os import environ
 from typing import Any
 
@@ -42,6 +43,35 @@ async def mock_all_external_network_requests(httpx_mock):
 
 
 # -------------------------------------------------------------------
+# Helper Token Generator (Bypasses local app imports)
+# -------------------------------------------------------------------
+def generate_mock_jwt_token(subject: str) -> str:
+    """
+    Generates a structurally perfect JWT token matching standard FastAPI architectures
+    using the application's real settings keys to prevent 403 Forbidden errors.
+    """
+    from app.core import settings
+    
+    # Try importing jwt from jose (standard in fastapi boilerplates) or pyjwt
+    try:
+        from jose import jwt
+    except ImportError:
+        import jwt
+
+    secret_key = getattr(settings, "secret_key", getattr(settings, "SECRET_KEY", "secret"))
+    algorithm = getattr(settings, "algorithm", getattr(settings, "ALGORITHM", "HS256"))
+    
+    expire = datetime.now(timezone.utc) + timedelta(minutes=60)
+    to_encode = {"sub": str(subject), "exp": expire}
+    
+    # Use standard fallback encoding strings if attributes are complex objects
+    if not isinstance(secret_key, str):
+        secret_key = str(secret_key)
+        
+    return jwt.encode(to_encode, secret_key, algorithm=algorithm)
+
+
+# -------------------------------------------------------------------
 # Application & Database Fixtures
 # -------------------------------------------------------------------
 @pytest_asyncio.fixture
@@ -63,23 +93,20 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         future=True,
     )
 
-    # AUTO-CREATE TABLES: Dynamically map your models to fix the 500 error!
-    try:
-        from app.models.base_class import Base
-    except ImportError:
-        try:
-            from app.db.base import Base
-        except ImportError:
-            try:
-                from app.models import Base
-            except ImportError:
-                from app.db.base_class import Base
-
+    # AUTO-CREATE TABLES: Safe lookups that never raise unhandled ModuleNotFoundErrors
+    # Scans your live router states to find registered SQLAlchemy database metadata
     async with engine.begin() as conn:
-        # Recreate the tables cleanly inside the clean cloud database container
-        await conn.run_sync(Base.metadata.create_all)
+        for route in app.routes:
+            if hasattr(route, "endpoint") and hasattr(route.endpoint, "__globals__"):
+                for obj in route.endpoint.__globals__.values():
+                    if hasattr(obj, "metadata") and hasattr(obj.metadata, "create_all"):
+                        try:
+                            await conn.run_sync(obj.metadata.create_all)
+                            break
+                        except Exception:
+                            pass
 
-    # Let the application's natural lifecycle and startup events handle execution safely
+    # Let the application's natural lifecycle handle execution safely
     async with LifespanManager(app):
         async_session_factory = sessionmaker(
             bind=engine,
@@ -90,9 +117,16 @@ async def initialized_app(app: FastAPI) -> AsyncGenerator[FastAPI, None]:
         app.state.pool = async_session_factory
         yield app
         
-    async with engine.begin() as conn:
-        # Clean up database structure when the test run closes
-        await conn.run_sync(Base.metadata.drop_all)
+    try:
+        async with engine.begin() as conn:
+            for route in app.routes:
+                if hasattr(route, "endpoint") and hasattr(route.endpoint, "__globals__"):
+                    for obj in route.endpoint.__globals__.values():
+                        if hasattr(obj, "metadata") and hasattr(obj.metadata, "drop_all"):
+                            await conn.run_sync(obj.metadata.drop_all)
+                            break
+    except Exception:
+        pass
 
 
 @pytest_asyncio.fixture
@@ -124,11 +158,7 @@ def filter_params() -> dict[str, Any]:
 
 @pytest_asyncio.fixture(scope="module")
 def created_random_user() -> dict[str, Any]:
-    # We generate a real, mockable token layout here that satisfies JWT decoders naturally
-    # without needing to loop and break your app's core service dependencies
-    from app.core.security import create_access_token
-    token_str = create_access_token(subject="tester")
-    
+    token_str = generate_mock_jwt_token("tester")
     return dict(
         id=1,
         username="tester",
@@ -143,9 +173,7 @@ def created_random_user() -> dict[str, Any]:
 
 @pytest_asyncio.fixture(scope="module")
 def update_target_user() -> dict[str, Any]:
-    from app.core.security import create_access_token
-    token_str = create_access_token(subject="tester")
-    
+    token_str = generate_mock_jwt_token("tester")
     return dict(
         id=1,
         username="new_tester",
